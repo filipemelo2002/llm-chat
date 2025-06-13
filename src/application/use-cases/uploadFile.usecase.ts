@@ -1,31 +1,22 @@
-import { PutObjectCommand, HeadBucketCommand, S3Client, CreateBucketCommand } from "@aws-sdk/client-s3";
+import { StorageService } from "@services/storage.service";
+
+const FOLDER_NAME = "llm-vectors";
 
 export class UploadFileUseCase {
-  private storageProvider: S3Client;
-  constructor (
-    storageProvider: S3Client
-  ) {
-    this.storageProvider = storageProvider
-  }
+  constructor(private storageService: StorageService = new StorageService()) {}
 
   async execute(file: Express.Multer.File) {
-    try {
-      await this.storageProvider.send(new HeadBucketCommand({
-        Bucket: 'llm-vectors'
-      }))
-    } catch (exception: any) {
-      if (exception.name === "NotFound") {
-        await this.storageProvider.send(new CreateBucketCommand({
-          Bucket: 'llm-vectors'
-        }))
-      }
+    const folder = await this.storageService.findFolder(FOLDER_NAME);
+    if (!folder) {
+      await this.storageService.createFolder(FOLDER_NAME);
     }
 
-    const command = new PutObjectCommand({
-      Bucket: 'llm-vectors',
-      Body: file.buffer,
-      Key: `${Date.now()}-${file.originalname}`
-    })
-    await this.storageProvider.send(command)
+    const response = await this.storageService.storeFile({
+      fileContent: file.buffer,
+      folder: FOLDER_NAME,
+      fileName: `${Date.now()}-${file.originalname}`,
+    });
+
+    return response;
   }
 }
