@@ -1,6 +1,6 @@
 import { StorageService } from "@services/storage.service";
 
-const FOLDER_NAME = "llm-vectors";
+export const FOLDER_NAME = "llm-vectors";
 
 export class UploadFileUseCase {
   constructor(private storageService: StorageService = new StorageService()) {}
@@ -11,12 +11,16 @@ export class UploadFileUseCase {
       await this.storageService.createFolder(FOLDER_NAME);
     }
 
+    const fileName = `${Date.now()}-${file.originalname}`
     const response = await this.storageService.storeFile({
       fileContent: file.buffer,
       folder: FOLDER_NAME,
-      fileName: `${Date.now()}-${file.originalname}`,
+      fileName,
     });
 
-    return response;
+    return {
+      fileName,
+      data: response
+    };
   }
 }

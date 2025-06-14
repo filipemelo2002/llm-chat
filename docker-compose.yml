@@ -21,11 +21,9 @@ services:
     ports:
       - "6379:6379"
   postgres:
-    hostname: 127.0.0.1
     image: pgvector/pgvector:pg16
     ports:
       - 5432:5432
-    restart: always
     environment:
       - POSTGRES_DB=llm_vectors
       - POSTGRES_USER=llm_user

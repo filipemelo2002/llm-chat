@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { UploadFileUseCase } from "@application/use-cases/uploadFile.usecase";
+import { queueProcess } from "@services/job-queuer.service";
 
 export class FilesProcessingController {
   constructor(
@@ -15,17 +16,18 @@ export class FilesProcessingController {
     }
 
     try {
-      await this.uploadFileUseCase.execute(file);
+      const {fileName} = await this.uploadFileUseCase.execute(file);
+      const id = await queueProcess(fileName);
+      response.status(200).json({
+        message: "File uploaded successfully",
+        processId: id
+      });
+    return;
     } catch (exception) {
       response.status(500).json({
         message: "Error when processing file. Try again later.",
       });
       process.exit(-1);
     }
-
-    response.status(200).json({
-      message: "File uploaded successfully",
-    });
-    return;
   }
 }
