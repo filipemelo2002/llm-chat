@@ -1,8 +1,11 @@
 import { PGVectorStore } from "@langchain/community/vectorstores/pgvector";
-import { OllamaEmbeddings } from "@langchain/ollama";
+import { ChatOllama, OllamaEmbeddings } from "@langchain/ollama";
 import { Document } from "@langchain/core/documents";
-import { Pool } from 'pg'
+import { createRetrievalChain } from "langchain/chains/retrieval";
+import { createStuffDocumentsChain } from "langchain/chains/combine_documents";
+import { Pool } from "pg";
 import { logger } from "@utils/logger.utils";
+import { ChatPromptTemplate } from "@langchain/core/prompts";
 
 export class VectorStore {
   private store?: PGVectorStore;
@@ -11,6 +14,11 @@ export class VectorStore {
       model: "deepseek-r1:8b",
       baseUrl: "http://localhost:11434",
       maxRetries: 2,
+    }),
+    private llm = new ChatOllama({
+      model: "deepseek-r1:8b",
+      baseUrl: "http://localhost:11434",
+      temperature: 0.2,
     })
   ) {}
 
@@ -52,5 +60,38 @@ export class VectorStore {
     }
 
     return vectors;
+  }
+
+  async retrieveRelevantDocuments(value: string) {
+    const store = await this.getStore();
+    const retriever = store.asRetriever();
+    const prompt = ChatPromptTemplate.fromTemplate(
+      `Answer the user's question: {input} based on the following context {context}`
+    );
+    const combineDocsChain = await createStuffDocumentsChain({
+      llm: this.llm,
+      prompt,
+    });
+    const retrievalChain = await createRetrievalChain({
+      combineDocsChain,
+      retriever,
+    });
+
+    const transformStream = new TransformStream<{
+      context: Document[];
+      answer: string;
+    }>({
+      transform(chunk, controller) {
+        try {
+          if (chunk.answer) {
+            controller.enqueue(chunk.answer);
+          }
+        } catch (err) {
+          logger.error("Tansform error: ", err);
+        }
+      },
+    });
+    const stream = await retrievalChain.stream({ input: value });
+    return stream.pipeThrough(transformStream);
   }
 }
