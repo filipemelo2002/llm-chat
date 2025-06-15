@@ -21,15 +21,20 @@ services:
     ports:
       - "6379:6379"
   postgres:
-    hostname: 127.0.0.1
-    image: pgvector/pgvector:pg16
+    image: ankane/pgvector
     ports:
       - 5432:5432
-    restart: always
     environment:
       - POSTGRES_DB=llm_vectors
       - POSTGRES_USER=llm_user
       - POSTGRES_PASSWORD=11m_s3cr3t
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+  adminer:
+    image: adminer
+    ports:
+      - 8081:8080
 networks:
   default:
     name: llm-chat-network
+
