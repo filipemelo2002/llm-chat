@@ -1,5 +1,6 @@
 import {
   CreateBucketCommand,
+  GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
   S3Client,
@@ -65,5 +66,21 @@ export class StorageService {
     });
     const response = await this.storageProvider.send(command);
     return response;
+  }
+
+  async getFile({
+    fileName,
+    folder,
+  }: {
+    folder: string;
+    fileName: string;
+  }) {
+    const command = new GetObjectCommand({
+      Bucket: folder,
+      Key: fileName,
+    })
+    const response = await this.storageProvider.send(command);
+    const body = await response.Body
+    return body
   }
 }
