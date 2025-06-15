@@ -4,6 +4,7 @@ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { VectorStore } from "@services/vectorstore.service";
 import { logger } from "@utils/logger.utils";
 import { UseCase } from "./uses-cases.types";
+import { getTextFromPdf } from "@utils/pdf.utils";
 
 export class ProcessAndEmbedFileUseCase implements UseCase {
   constructor(
@@ -23,10 +24,11 @@ export class ProcessAndEmbedFileUseCase implements UseCase {
       throw new Error("Error fetching file: " + fileName);
     }
 
-    const fileStr = await file.transformToString();
+    const byteArray = await file.transformToByteArray();
+    const pdfTtext = await getTextFromPdf(Buffer.from(byteArray));
     const textSplitter = new RecursiveCharacterTextSplitter();
     logger.info(`[${id}] Splitting file into chunks...`);
-    const chunks = await textSplitter.createDocuments([fileStr]);
+    const chunks = await textSplitter.createDocuments([pdfTtext]);
     logger.info(`[${id}] Saving document chunks as vector arrays...`);
     const vectors = await this.vectorStore.saveDocumentsAsVectors(chunks);
     logger.info(`[${id}] Vectors processed: ${vectors.length}`);
