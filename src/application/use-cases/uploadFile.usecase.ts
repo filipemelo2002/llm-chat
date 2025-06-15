@@ -1,8 +1,9 @@
 import { StorageService } from "@services/storage.service";
+import { UseCase } from "./uses-cases.types";
 
-const FOLDER_NAME = "llm-vectors";
+export const FOLDER_NAME = "llm-vectors";
 
-export class UploadFileUseCase {
+export class UploadFileUseCase implements UseCase {
   constructor(private storageService: StorageService = new StorageService()) {}
 
   async execute(file: Express.Multer.File) {
@@ -11,12 +12,16 @@ export class UploadFileUseCase {
       await this.storageService.createFolder(FOLDER_NAME);
     }
 
+    const fileName = `${Date.now()}-${file.originalname}`
     const response = await this.storageService.storeFile({
       fileContent: file.buffer,
       folder: FOLDER_NAME,
-      fileName: `${Date.now()}-${file.originalname}`,
+      fileName,
     });
 
-    return response;
+    return {
+      fileName,
+      data: response
+    };
   }
 }
