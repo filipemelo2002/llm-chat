@@ -5,11 +5,13 @@ import { VectorStore } from "@services/vectorstore.service";
 import { logger } from "@utils/logger.utils";
 import { UseCase } from "./uses-cases.types";
 import { getTextFromPdf } from "@utils/pdf.utils";
+import { LLMService } from "@services/llm.service";
 
 export class ProcessAndEmbedFileUseCase implements UseCase {
   constructor(
     private storageService = new StorageService(),
-    private vectorStore = new VectorStore()
+    private vectorStore = new VectorStore(),
+    private llmService = new LLMService()
   ) {}
 
   async execute({ id, fileName }: { id?: string; fileName: string }) {
@@ -30,7 +32,18 @@ export class ProcessAndEmbedFileUseCase implements UseCase {
     logger.info(`[${id}] Splitting file into chunks...`);
     const chunks = await textSplitter.createDocuments([pdfTtext]);
     logger.info(`[${id}] Saving document chunks as vector arrays...`);
-    const vectors = await this.vectorStore.saveDocumentsAsVectors(chunks);
+    const vectors = [];
+    for (const chunk of chunks) {
+      const vector = await this.llmService.embedDocument(chunk);
+      await this.vectorStore.saveVectorizedDocument({
+        vector,
+        document: chunk,
+      });
+      vectors.push(vector);
+      logger.info(
+        `[${id}] Processed ${vectors.length} chunks out of ${chunks.length}...`
+      );
+    }
     logger.info(`[${id}] Vectors processed: ${vectors.length}`);
   }
 }
