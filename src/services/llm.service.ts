@@ -5,6 +5,7 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { createStuffDocumentsChain } from "langchain/chains/combine_documents";
 import { createRetrievalChain } from "langchain/chains/retrieval";
 import { logger } from "@utils/logger.utils";
+import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 
 export class LLMService {
   constructor(
@@ -69,5 +70,47 @@ Answer:
     });
     const stream = await retrievalChain.stream({ input: prompt });
     return stream.pipeThrough(transformStream);
+  }
+
+  getTextSplitterTransform() {
+    const textSplitter = new RecursiveCharacterTextSplitter();
+    const transform = new TransformStream<
+      string,
+      Document<Record<string, any>>
+    >({
+      async transform(chunk, controller) {
+        try {
+          if (chunk) {
+            logger.info("parsing chunk to PDF");
+            const value = await textSplitter.createDocuments([chunk]);
+            value.forEach((item) => controller.enqueue(item));
+          }
+        } catch (err) {
+          logger.error(`Error transforming getTextSplitterTransform`);
+        }
+      },
+    });
+    return transform;
+  }
+
+  getVectorStreamTransform() {
+    const embedder = this.embedder;
+    const transform = new TransformStream<
+      Document<Record<string, any>>,
+      { vector: number[]; document: Document<Record<string, any>> }
+    >({
+      async transform(chunk, controller) {
+        try {
+          if (chunk) {
+            logger.info("parsing chunk to Vector");
+            const vector = await embedder.embedQuery(chunk.pageContent);
+            controller.enqueue({ vector, document: chunk });
+          }
+        } catch (err) {
+          logger.error(`Error transforming getVectorEmbedingTransform`);
+        }
+      },
+    });
+    return transform;
   }
 }

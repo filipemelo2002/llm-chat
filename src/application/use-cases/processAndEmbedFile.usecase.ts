@@ -4,14 +4,15 @@ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { VectorStore } from "@services/vectorstore.service";
 import { logger } from "@utils/logger.utils";
 import { UseCase } from "./uses-cases.types";
-import { getTextFromPdf } from "@utils/pdf.utils";
 import { LLMService } from "@services/llm.service";
+import { FilesService } from "@services/files.service";
 
 export class ProcessAndEmbedFileUseCase implements UseCase {
   constructor(
     private storageService = new StorageService(),
     private vectorStore = new VectorStore(),
-    private llmService = new LLMService()
+    private llmService = new LLMService(),
+    private fileService = new FilesService()
   ) {}
 
   async execute({ id, fileName }: { id?: string; fileName: string }) {
@@ -26,11 +27,19 @@ export class ProcessAndEmbedFileUseCase implements UseCase {
       throw new Error("Error fetching file: " + fileName);
     }
 
-    const byteArray = await file.transformToByteArray();
-    const pdfTtext = await getTextFromPdf(Buffer.from(byteArray));
+    const fileText = await this.fileService.getFileContentStream({
+      file: file,
+      filename: fileName
+    })
+
+    if (!fileText) {
+      logger.error("Could export file as text")
+      process.exit(-1)
+    }
+
     const textSplitter = new RecursiveCharacterTextSplitter();
     logger.info(`[${id}] Splitting file into chunks...`);
-    const chunks = await textSplitter.createDocuments([pdfTtext]);
+    const chunks = await textSplitter.createDocuments([fileText]);
     logger.info(`[${id}] Saving document chunks as vector arrays...`);
     const vectors = [];
     for (const chunk of chunks) {

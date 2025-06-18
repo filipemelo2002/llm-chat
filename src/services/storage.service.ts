@@ -68,19 +68,13 @@ export class StorageService {
     return response;
   }
 
-  async getFile({
-    fileName,
-    folder,
-  }: {
-    folder: string;
-    fileName: string;
-  }) {
+  async getFile({ fileName, folder }: { folder: string; fileName: string }) {
     const command = new GetObjectCommand({
       Bucket: folder,
       Key: fileName,
-    })
+    });
     const response = await this.storageProvider.send(command);
-    const body = await response.Body
-    return body
+    const body = response.Body;
+    return body;
   }
 }
