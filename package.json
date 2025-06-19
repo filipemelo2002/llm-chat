@@ -13,6 +13,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.828.0",
     "@langchain/community": "^0.3.46",
+    "@langchain/langgraph": "^0.3.4",
+    "@langchain/langgraph-checkpoint-postgres": "^0.0.5",
     "@langchain/ollama": "^0.2.1",
     "bullmq": "^5.53.3",
     "express": "^5.1.0",

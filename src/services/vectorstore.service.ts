@@ -10,21 +10,21 @@ export class VectorStore {
       model: "deepseek-r1:8b",
       baseUrl: "http://localhost:11434",
       maxRetries: 2,
-    })
-  ) {}
-
-  private async getStore() {
-    if (!this.store) {
-      const pool = new Pool({
+    }),
+    private pool = new Pool({
         user: "llm_user",
         password: "11m_s3cr3t",
         database: "llm_vectors",
         host: "localhost",
         port: 5432,
-      });
+      })
+  ) {}
+
+  private async getStore() {
+    if (!this.store) {
       this.store = await PGVectorStore.initialize(this.embedder, {
         tableName: "llm_chat_vectors",
-        pool,
+        pool: this.pool,
         columns: {
           idColumnName: "id",
           vectorColumnName: "vector",

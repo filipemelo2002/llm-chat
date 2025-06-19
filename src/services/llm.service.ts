@@ -1,11 +1,17 @@
 import { ChatOllama, OllamaEmbeddings } from "@langchain/ollama";
 import { Document } from "@langchain/core/documents";
 import { VectorStoreRetrieverInterface } from "@langchain/core/vectorstores";
-import { ChatPromptTemplate } from "@langchain/core/prompts";
+import {
+  ChatPromptTemplate,
+  MessagesPlaceholder,
+} from "@langchain/core/prompts";
 import { createStuffDocumentsChain } from "langchain/chains/combine_documents";
 import { createRetrievalChain } from "langchain/chains/retrieval";
-import { logger } from "@utils/logger.utils";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { createHistoryAwareRetriever } from "langchain/chains/history_aware_retriever";
+import {
+  BaseMessage,
+  SystemMessage,
+} from "@langchain/core/messages";
 
 export class LLMService {
   constructor(
@@ -25,92 +31,62 @@ export class LLMService {
     return this.embedder.embedQuery(document.pageContent);
   }
 
-  async processPrompt({
-    prompt,
-    retriever,
-  }: {
-    prompt: string;
-    retriever: VectorStoreRetrieverInterface;
-  }) {
-    const promptTemplate = ChatPromptTemplate.fromTemplate(`
-You are an AI assistant that provides accurate and helpful answers based strictly on the given context.
+  private async createRagChain(retriever: VectorStoreRetrieverInterface) {
+    const contextualizedPrompt = ChatPromptTemplate.fromMessages([
+      ["system",
+        "Given a chat history and the latest user question " +
+          "which might reference context in the chat history, " +
+          "formulate a standalone question which can be understood " +
+          "without the chat history. Do NOT answer the question, " +
+          "just reformulate it if needed and otherwise return it as is."
+      ],
+      new MessagesPlaceholder("chat_history"),
+      ["human", "{input}"],
+    ]);
+
+    const historyRetriever = await createHistoryAwareRetriever({
+      llm: this.llm,
+      retriever,
+      rephrasePrompt: contextualizedPrompt,
+    });
+
+    const promptTemplate = ChatPromptTemplate.fromMessages([
+      new SystemMessage(`
+        You are an AI assistant that provides accurate and helpful answers based strictly on the given context.
 Follow these rules:
 1. If the answer is found in the context, respond concisely and cite relevant parts.
 2. If the answer isn't in the context, say "I couldn't find this in the provided documents," and avoid guessing.
 3. If the question is ambiguous or unclear, ask for clarification.
+`),
+      new MessagesPlaceholder("chat_history"),
+      ["human", "context: {context} input: {input}"],
+    ]);
 
-Context: {context}
-
-Question: {input}
-
-Answer:
-`);
-    const combineDocsChain = await createStuffDocumentsChain({
+    const qaAnswerChain = await createStuffDocumentsChain({
       llm: this.llm,
       prompt: promptTemplate,
     });
     const retrievalChain = await createRetrievalChain({
-      combineDocsChain,
-      retriever,
+      combineDocsChain: qaAnswerChain,
+      retriever: historyRetriever,
     });
-
-    const transformStream = new TransformStream<{
-      context: Document[];
-      answer: string;
-    }>({
-      transform(chunk, controller) {
-        try {
-          if (chunk.answer) {
-            controller.enqueue(chunk.answer);
-          }
-        } catch (err) {
-          logger.error("Tansform error: ", err);
-        }
-      },
-    });
-    const stream = await retrievalChain.stream({ input: prompt });
-    return stream.pipeThrough(transformStream);
+    return retrievalChain;
   }
 
-  getTextSplitterTransform() {
-    const textSplitter = new RecursiveCharacterTextSplitter();
-    const transform = new TransformStream<
-      string,
-      Document<Record<string, any>>
-    >({
-      async transform(chunk, controller) {
-        try {
-          if (chunk) {
-            logger.info("parsing chunk to PDF");
-            const value = await textSplitter.createDocuments([chunk]);
-            value.forEach((item) => controller.enqueue(item));
-          }
-        } catch (err) {
-          logger.error(`Error transforming getTextSplitterTransform`);
-        }
-      },
+  async processPrompt({
+    prompt,
+    retriever,
+    messages,
+  }: {
+    prompt: string;
+    retriever: VectorStoreRetrieverInterface;
+    messages: BaseMessage[];
+  }) {
+    const ragChain = await this.createRagChain(retriever);
+    const response = await ragChain.invoke({
+      input: prompt,
+      chat_history: messages,
     });
-    return transform;
-  }
-
-  getVectorStreamTransform() {
-    const embedder = this.embedder;
-    const transform = new TransformStream<
-      Document<Record<string, any>>,
-      { vector: number[]; document: Document<Record<string, any>> }
-    >({
-      async transform(chunk, controller) {
-        try {
-          if (chunk) {
-            logger.info("parsing chunk to Vector");
-            const vector = await embedder.embedQuery(chunk.pageContent);
-            controller.enqueue({ vector, document: chunk });
-          }
-        } catch (err) {
-          logger.error(`Error transforming getVectorEmbedingTransform`);
-        }
-      },
-    });
-    return transform;
+    return response;
   }
 }

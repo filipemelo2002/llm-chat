@@ -1,7 +1,6 @@
-version: '3.8'
+version: "3.8"
 
 services:
-
   minio:
     image: minio/minio
     container_name: minio
@@ -9,7 +8,7 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - ./minio-data:/data
+      - minio-data:/data
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -29,12 +28,50 @@ services:
       - POSTGRES_USER=llm_user
       - POSTGRES_PASSWORD=11m_s3cr3t
     volumes:
-      - ./postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
   adminer:
     image: adminer
     ports:
       - 8081:8080
+  # ======= Monitoring Stack =======
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - redis-exporter
+      - postgres-exporter
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  redis-exporter:
+    image: oliver006/redis_exporter
+    ports:
+      - "9121:9121"
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    ports:
+      - "9187:9187"
+    environment:
+      - DATA_SOURCE_NAME=postgresql://llm_user:11m_s3cr3t@postgres:5432/llm_vectors?sslmode=disable
+
+volumes:
+  grafana-data:
+  postgres-data:
+  minio-data:
+
 networks:
   default:
     name: llm-chat-network
-
